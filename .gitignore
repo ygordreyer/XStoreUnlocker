@@ -1,0 +1,12 @@
+build/
+build-native/
+dist/
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.log
+TestResults/
+artifacts/
+

@@ -5,6 +5,7 @@
 #include <mutex>
 #include <cstdio>
 #include <Windows.h>
+#include <filesystem>
 
 class Logger {
 public:
@@ -13,10 +14,10 @@ public:
         return inst;
     }
 
-    void Init(const std::string& path) {
+    void Init(const std::filesystem::path& path) noexcept { try {
         std::lock_guard<std::mutex> lock(m_mtx);
         m_file.open(path, std::ios::out | std::ios::trunc);
-    }
+    } catch (...) {} }
 
     void SetEnabled(bool on) { m_on = on; }
 

@@ -5,13 +5,13 @@
 
 namespace StoreHooks {
     void Initialize(const UnlockerConfig& cfg);
-    void OnStoreInterfaceCreated(void** ppInterface);
+    void OnStoreInterfaceCreated(void** ppInterface, const GUID* interfaceGuid);
     void Shutdown();
 }
 
 namespace PackageHooks {
     void Initialize(const UnlockerConfig& cfg);
-    void OnPackageInterfaceCreated(void** ppInterface);
+    void OnPackageInterfaceCreated(void** ppInterface, const GUID* interfaceGuid);
     void Shutdown();
 }
 
