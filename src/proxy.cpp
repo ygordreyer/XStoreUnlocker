@@ -1,5 +1,6 @@
 #include "proxy.h"
 #include "logger.h"
+#include "paths.h"
 #include <string>
 #include <mutex>
 
@@ -16,19 +17,13 @@ static UninitializeApiImpl_t   g_UninitializeApiImpl   = nullptr;
 static DllCanUnloadNow_t       g_DllCanUnloadNow       = nullptr;
 static XErrorReport_t          g_XErrorReport           = nullptr;
 
-static std::string GetDllDir() {
-    char buf[MAX_PATH];
-    GetModuleFileNameA(g_module, buf, MAX_PATH);
-    std::string path(buf);
-    auto pos = path.find_last_of("\\/");
-    return (pos != std::string::npos) ? path.substr(0, pos) : path;
-}
-
 static void DoInit() {
-    std::string dllPath = GetDllDir() + "\\XGameRuntime_o.dll";
-    LOG_INFO("Loading real DLL: %s", dllPath.c_str());
+    const auto modulePath = Paths::ModulePath(g_module);
+    if (modulePath.empty()) return;
+    const auto dllPath = modulePath.parent_path() / L"XGameRuntime_o.dll";
+    LOG_INFO("Loading real DLL: %s", Paths::Utf8(dllPath).c_str());
 
-    g_realDll = LoadLibraryA(dllPath.c_str());
+    g_realDll = LoadLibraryW(dllPath.c_str());
     if (!g_realDll) {
         LOG_ERROR("Failed to load XGameRuntime_o.dll (err=%lu)", GetLastError());
         return;
@@ -54,8 +49,10 @@ static void DoInit() {
 void Proxy::SetOurModule(HMODULE m) { g_module = m; }
 
 bool Proxy::EnsureInitialized() {
-    std::call_once(g_flag, DoInit);
-    return g_ok;
+    try {
+        std::call_once(g_flag, DoInit);
+        return g_ok;
+    } catch (...) { return false; }
 }
 
 void Proxy::Shutdown(bool processTerminating) {

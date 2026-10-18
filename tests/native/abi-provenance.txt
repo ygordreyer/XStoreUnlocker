@@ -1,0 +1,50 @@
+ABI provenance: Microsoft.GDK.Windows 2604.5.7903, native/260405/windows/lib/x64/xgameruntime.lib
+Source: https://www.nuget.org/packages/Microsoft.GDK.Windows/2604.5.7903
+Library SHA256: B308A518B1ACC6FF62527201F0F58D1DB08BA21382FDF9DD5F508178DD0D9751
+No Microsoft binaries or headers are included in this repository.
+
+Derivation commands (Visual Studio 18.0 tools):
+  llvm-objdump.exe -dr --x86-asm-syntax=intel xgameruntime.lib
+  llvm-readobj.exe --codeview xgameruntime.lib
+
+XStoreAcquireLicenseForPackageAsync has CodeView local i: IStoreImpl6* (0x1AD9).
+Its wrapper loads RDX from relocation _GUID_b09d803c_2414_4a05_82c6_66dfdc9e9a44,
+RCX from _GUID_0dd112ac_7c24_448c_b92b_3960fb5bd30c, calls QueryApiImpl,
+then dispatches through [vtable+0xA0]. CodeView IStoreImpl6 Struct 0x1AD7 has
+VFTableShape 0x1AD6 with VFEntryCount 84 and source contracts/StoreImpl.h:487.
+
+XPackageMountWithUiAsync loads RDX from relocation
+_GUID_0b9d556e_ab70_43f4_baa0_9999ac4cb040, RCX from package provider
+_GUID_af406016_e850_4aa8_a88d_2f3dcb9dac7e and dispatches [vtable+0x128].
+CodeView IPackageImpl9 Struct 0x1929 has VFTableShape 0x1928, VFEntryCount 42,
+and source contracts/PackageImpl.h:186. It derives IPackageImpl8 at offset 0.
+
+Patched store dispatches, byte offset divided by 8 gives the array index:
+  0x68 QueryProductForPackageAsync; 0x70 QueryProductForPackageResult
+  0x78 EnumerateProductsQuery; 0x98 CloseProductsQueryHandle
+  0xA0 AcquireLicenseForPackageAsync; 0xA8 AcquireLicenseForPackageResult
+  0xB0 IsLicenseValid; 0xB8 CloseLicenseHandle
+  0xC0 CanAcquireLicenseForStoreIdAsync; 0xC8 CanAcquireLicenseForStoreIdResult
+  0xD0 CanAcquireLicenseForPackageAsync; 0xD8 CanAcquireLicenseForPackageResult
+  0x100 QueryAddOnLicensesResult; 0x208 QueryPackageIdentifier
+  0x220 RegisterPackageLicenseLost; 0x228 UnregisterPackageLicenseLost
+  0x238 AcquireLicenseForDurablesAsync; 0x240 AcquireLicenseForDurablesResult
+CodeView QueryAddOnLicensesResult signature is (XAsyncBlock*, unsigned count,
+XStoreAddonLicense*). The count is records, not bytes.
+Durable wrappers request IStoreImpl3 IID 2d42fea5-e71d-4b76-97cd-c50afbb3ae5d;
+the higher IStoreImpl6 contract includes those inherited offsets.
+
+Patched package dispatches:
+  0xB8 Mount; 0xC0 GetMountPathSize; 0xC8 GetMountPath; 0xD0 CloseMountHandle
+  0x128 MountWithUiAsync; 0x130 MountWithUiResult; 0x138 EnumeratePackages
+Current EnumeratePackages uses the 80-byte XPackageDetails public structure.
+Older enumeration slots 0xA0,0xE0,0x118 use V1,V2,V3::XPackageDetails and are
+left unchanged. Mount slot0xB8 is verified in CodeView IPackageImpl1, although
+the current SDK's public synchronous XPackageMount wrapper returns E_NOTIMPL.
+
+Gate contract:
+  Query the verified highest IID through IUnknown::QueryInterface.
+  Require returned interface's vtable pointer to equal the incoming vtable.
+  Validate the full known entry count and image-backed executable targets.
+  Lower interface queries work only when they share that verified highest table.
+  Unknown or unsupported layouts pass through without memory modification.

@@ -1,90 +1,95 @@
-# XStoreUnlocker
+# XStore Manager
 
-DLC unlocker for Microsoft Store and Xbox PC games. Works on games that use the XStore API for validating DLC ownership.
+A Windows desktop manager for Microsoft Store and Xbox PC game profiles, with a maintained XStoreUnlocker runtime.
 
-## Install
+![Profile and installation flow](docs/img/xstore-manager-flow.svg)
 
-You need three files in your game folder:
+## Start
 
-| File | What it is |
-|------|------------|
-| `XGameRuntime.dll` | Our proxy DLL (from the release zip) |
-| `XGameRuntime_o.dll` | The real Xbox runtime (you provide this) |
-| `xstore_unlocker.ini` | Config file (from the release zip, or auto-created on first launch) |
+Extract the portable package and launch `XStoreManager.exe`. The full package includes the .NET runtime.
 
-Steps:
+| Action | Result |
+|---|---|
+| Scan libraries | Finds accessible Xbox game manifests without changing game files |
+| Add game | Adds a game folder manually |
+| Refresh catalogue | Fetches named durable add-ons from Microsoft Store |
+| Use / Block | Selects individual DLC or denies them explicitly |
+| Enable runtime unlocker | Enables the profile when it is applied |
+| Install / Apply | Installs the bundled engine and writes this game's settings |
+| Uninstall / Restore | Restores the original files and keeps the saved profile |
 
-1. Copy `XGameRuntime.dll` from `C:\Windows\System32` into your game folder
-2. Rename it to `XGameRuntime_o.dll`
-3. Drop our `XGameRuntime.dll` and `xstore_unlocker.ini` from the release zip into the same folder
-4. Launch the game
+New games and newly discovered DLC are disabled by default. Profile edits are saved separately; use **Install / Apply** to deploy them.
 
-Your game folder should look like this:
+## Profiles and exclusions
 
-```
-GameFolder/
-  game.exe
-  XGameRuntime.dll          <- ours (proxy)
-  XGameRuntime_o.dll        <- the original from System32
-  xstore_unlocker.ini       <- config
-```
+| Setting | Behavior |
+|---|---|
+| Use | Selects this DLC when Unlock all is off |
+| Block | Takes priority over Use and Unlock all |
+| Mount path | Uses an existing content folder for separately installed DLC |
+| Unlock all | Applies to supported durable products queried at runtime |
+| Enable logging | Writes `xstore_unlocker.log` beside the game's proxy |
+| Exclude from installation | Prevents future installation for this game |
 
-Check `xstore_unlocker.log` in the game folder to confirm hooks are working.
+For an already installed game, exclusion does not remove its files. Use **Uninstall / Restore**, or clear **Enable runtime unlocker** and apply to disable runtime changes.
 
-## Configuration
+The manager does not download DLC files. DLC with no custom mount path uses the game's embedded content where the runtime supports it. A selected checkbox does not prove the content is installed or playable.
 
-The INI file is created automatically on first launch if missing.
+## Existing installations
 
-### [Settings]
+| Detected state | Next action |
+|---|---|
+| Unmodified Microsoft runtime | Install normally |
+| Existing INI only | Import it, then explicitly adopt it during installation |
+| Unknown proxy or backup DLL | Restore the existing installation before installing this manager |
+| Managed files changed externally | Review the conflict before replacing files |
+| Missing managed proxy or INI | Repair reinstalls missing files while preserving the original runtime |
+| Interrupted transaction | Repair or uninstall recovers the recorded transaction first |
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `unlock_all` | 1 | Patches every DLC the game queries from the store as owned. Covers most DLCs. Does not cover unlisted DLCs the game never queries for. Set to 0 to disable. |
-| `log_enabled` | 1 | Writes to `xstore_unlocker.log` and OutputDebugString. Set to 0 for silent operation. Errors always log regardless. |
+Original files are retained in `.xstore-manager.json`. The durable transaction journal is `.xstore-manager.transaction.json`. Keep these files until uninstall completes.
 
-### [Blacklist]
+Game processes must be closed before installation or removal. The manager never changes the system runtime or takes ownership of protected folders.
 
-Store IDs to skip even when `unlock_all=1`. One per line.
+## Runtime changes
 
-```ini
-[Blacklist]
-9P4P5VWJWD6S=1
-```
+| Area | Maintained behavior |
+|---|---|
+| Configuration | Honors disabled INI entries and normalizes Store IDs |
+| Selection | Shares a deny-first policy across ID-aware hooks |
+| Async operations | Retains item identity across initiation and result |
+| Mount paths | Resolves package identity to Store ID before applying an override |
+| Unrelated operations | Preserves original results when the item cannot be identified |
+| Base-game licensing | Leaves global base-game and opaque COM operations unchanged |
+| Runtime interface | Requires the SDK-confirmed Store 6 or Package 9 contract before patching |
 
-### [DLCs]
+Interface identities and method positions were verified against Microsoft's GDK 2604.5.7903 wrapper library. See [ABI provenance](tests/native/abi-provenance.txt). Older package enumeration layouts remain untouched.
 
-Some games have DLCs that exist in the store but are never queried at runtime. Promo items, hardware bundle exclusives, delisted content. The `unlock_all` option cannot reach these because the game never asks for them.
+Missing content, unsupported runtime interfaces, and server-controlled entitlements remain compatibility limits. Synthetic packages cannot safely bypass an error returned before a real async operation is queued.
 
-Add their Store IDs here. The unlocker injects fake owned products into the game's query results so it sees them as purchased.
+## Data and build
 
-Get Store IDs from [dbox.tools](https://dbox.tools) by searching for your game.
+Profiles are stored in `%LOCALAPPDATA%\XStoreManager`. Use `--data-dir <folder>` for an isolated profile store.
 
-```ini
-[DLCs]
-9N6F78CNKF3L=1
-9PNB6L2L9RW8=1
-```
+| Requirement | Version |
+|---|---|
+| Desktop | Windows x64 |
+| Source build | .NET 8 SDK |
+| Native build | Visual Studio 2022 or 2026 with Desktop development with C++ and CMake |
 
-## Tested Games
-
-| Game | Status | Notes |
-|------|--------|-------|
-| Forza Horizon 5 | Working | All DLCs including unlisted promo cars |
-| Vampire Survivors | Working | All DLCs |
-
-## Building From Source
-
-Requires Visual Studio 2022+ with C++ desktop workload and CMake.
-
-```
-cd StoreUnlocker
-mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022" -A x64
-cmake --build . --config Release
+```powershell
+./scripts/build.ps1
 ```
 
-Output: `build/Release/XGameRuntime.dll`
+The build runs native and managed tests, then publishes the portable package to `dist/XStoreManager`. `-FrameworkDependent` produces a smaller package requiring the .NET 8 Desktop Runtime.
 
-## Legal
+```powershell
+./dist/XStoreManager/XStoreManager.exe --smoke-test --data-dir ./build/ui-smoke --screenshot ./build/ui.png
+```
 
-This software is provided for educational and research purposes only. Use it at your own risk. The author is not responsible for any consequences of using this tool. Do not use this tool to obtain content you do not have the right to access. Support the developers by purchasing games and DLCs.
+The UI smoke mode uses synthetic profiles, checks bindings and actions, and never installs into a game. Native tests and installer fixtures do not establish compatibility with every game.
+
+## Sources and license
+
+Based on [Zephkek/XStoreUnlocker](https://github.com/Zephkek/XStoreUnlocker), under the included GPL-3.0 license. Mount-path and selection work was informed by the [affu1212 fork](https://github.com/affu1212/XStoreUnlocker); the fork's generated binaries are not used.
+
+Catalogue metadata comes from Microsoft's public Store endpoints. No Xbox login is requested. This program does not grant account entitlements or fulfill server-managed purchases.

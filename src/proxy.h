@@ -29,5 +29,5 @@ static const GUID XPACKAGE_PROVIDER_GUID = {
 };
 
 inline bool GuidsEqual(const GUID* a, const GUID* b) {
-    return memcmp(a, b, sizeof(GUID)) == 0;
+    return a && b && memcmp(a, b, sizeof(GUID)) == 0;
 }

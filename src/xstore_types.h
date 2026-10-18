@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <Windows.h>
 
-//TODO: dig a bit deeper into 83-84
-constexpr size_t STORE_VTABLE_SIZE = 85;
+// Microsoft.GDK.Windows 2604.5.7903 CodeView contracts. See tests/native/abi-provenance.txt.
+constexpr size_t STORE_VTABLE_SIZE = 84;
+inline constexpr GUID IID_IStoreImpl6 = {0xb09d803c, 0x2414, 0x4a05, {0x82, 0xc6, 0x66, 0xdf, 0xdc, 0x9e, 0x9a, 0x44}};
+inline constexpr GUID IID_IPackageImpl9 = {0x0b9d556e, 0xab70, 0x43f4, {0xba, 0xa0, 0x99, 0x99, 0xac, 0x4c, 0xb0, 0x40}};
 
 constexpr size_t STORE_SKU_ID_SIZE           = 18;
 constexpr size_t IN_APP_OFFER_TOKEN_MAX_SIZE = 64;
@@ -142,7 +144,6 @@ namespace StoreVtable {
     // IStoreImpl6
     constexpr int Unknown82                                     = 82;
     constexpr int Unknown83                                     = 83;
-    constexpr int Unknown84                                     = 84;
 }
 
 // === Package vtable (42 entries) ===

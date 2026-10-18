@@ -1,0 +1,28 @@
+name: Build and verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build runtime, test, publish desktop app
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - name: Exercise desktop bindings
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ./dist/XStoreManager/XStoreManager.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Desktop smoke test failed: $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XStoreManager-win-x64
+          path: dist/XStoreManager/
+

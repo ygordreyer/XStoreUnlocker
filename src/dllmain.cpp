@@ -5,6 +5,7 @@
 #include "store_hooks.h"
 #include "config.h"
 #include "logger.h"
+#include "paths.h"
 
 #include <string>
 #include <cstdio>
@@ -30,14 +31,6 @@ static std::string GuidToString(const GUID* g) {
     return buf;
 }
 
-static std::string GetDllDirectory() {
-    char path[MAX_PATH];
-    GetModuleFileNameA(g_module, path, MAX_PATH);
-    std::string dir(path);
-    auto pos = dir.find_last_of("\\/");
-    return (pos != std::string::npos) ? dir.substr(0, pos) : dir;
-}
-
 extern "C" __declspec(dllexport) HRESULT __cdecl QueryApiImpl(
     const GUID* providerGuid,
     const GUID* interfaceGuid,
@@ -60,7 +53,7 @@ extern "C" __declspec(dllexport) HRESULT __cdecl QueryApiImpl(
                          GuidToString(interfaceGuid).c_str(),
                          *ppInterface);
             }
-            StoreHooks::OnStoreInterfaceCreated(ppInterface);
+            StoreHooks::OnStoreInterfaceCreated(ppInterface, interfaceGuid);
         }
 
         if (isPackageProvider) {
@@ -72,7 +65,7 @@ extern "C" __declspec(dllexport) HRESULT __cdecl QueryApiImpl(
                          GuidToString(interfaceGuid).c_str(),
                          *ppInterface);
             }
-            PackageHooks::OnPackageInterfaceCreated(ppInterface);
+            PackageHooks::OnPackageInterfaceCreated(ppInterface, interfaceGuid);
         }
     }
 
@@ -116,27 +109,31 @@ extern "C" __declspec(dllexport) void __cdecl XErrorReport(uint64_t code, const 
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
+    try {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
     {
         g_module = hModule;
         DisableThreadLibraryCalls(hModule);
+        Proxy::SetOurModule(hModule);
 
-        std::string dir = GetDllDirectory();
+        const auto modulePath = Paths::ModulePath(g_module);
+        const auto dir = modulePath.parent_path();
 
-        g_config = LoadConfig(dir + "\\xstore_unlocker.ini");
+        if (modulePath.empty()) g_config.enabled = false;
+        else g_config = LoadConfig(dir / L"xstore_unlocker.ini");
         Logger::Instance().SetEnabled(g_config.logEnabled);
         if (g_config.logEnabled) {
-            Logger::Instance().Init(dir + "\\xstore_unlocker.log");
-            LOG_INFO("XStoreAPI Unlocker v2.1.0");
-            LOG_INFO("Config: unlock_all=%d, log_enabled=%d, blacklist=%zu, dlcs=%zu",
+            Logger::Instance().Init(dir / L"xstore_unlocker.log");
+            LOG_INFO("XStoreManager runtime v3.0.0");
+            LOG_INFO("Config: enabled=%d, unlock_all=%d, log_enabled=%d, blacklist=%zu, dlcs=%zu",
+                     g_config.enabled,
                      g_config.unlockAll,
                      g_config.logEnabled,
                      g_config.blacklist.size(),
                      g_config.dlcs.size());
         }
 
-        Proxy::SetOurModule(hModule);
         StoreHooks::Initialize(g_config);
         PackageHooks::Initialize(g_config);
         ComServerHooks::Initialize(g_config);
@@ -145,11 +142,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
         break;
     }
     case DLL_PROCESS_DETACH:
+        if (lpReserved) break;
         ComServerHooks::Shutdown();
         PackageHooks::Shutdown();
         StoreHooks::Shutdown();
         Proxy::Shutdown(lpReserved != nullptr);
         break;
+    }
+    } catch (...) {
+        // A malformed configuration must leave the real runtime usable.
+        g_config.enabled = false;
+        try { StoreHooks::Initialize(g_config); } catch (...) {}
     }
 
     return TRUE;
